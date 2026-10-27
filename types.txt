@@ -1,0 +1,26 @@
+Available types
+- Primtives = string, number, bool, Duration
+- Literals = "order"
+- Unions = "orders" | "complaint"
+- Arrays = string[]
+- tuples = (string, number)
+- Records = type Order { id : string }
+- enums = Enum E { A, B(x:string)}
+- Result<T, E>
+
+
+enum AgentError {
+  Timeout
+  MaxStepsExceeded
+  MaxTokensExceeded
+  ToolFailed(tool: string, message: string)
+  GuardDenied(guard: string, reason: string)
+  ApprovalDenied(tool: string)
+  InvalidOutput(message: string)
+  ModelError(message: string)
+}
+
+
+parallel { a  b  c }
+let (a, b) = parallel { agente1.run(x)  agente2.run(x) }
+// a: Result<string, AgentError>, b: Result<string, AgentError>

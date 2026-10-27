@@ -1,0 +1,63 @@
+// 05-durable-refund.tel   (v0.2)
+// Workflow durable: se puede interrumpir y reanudar sin repetir lo ya hecho.
+// Combina efectos (read/write), aprobación humana y conversión de errores con ?.
+//
+// Qué pasa en ejecución:
+//  1. `eligibility` consulta el pedido (read). Su resultado queda en el journal.
+//  2. Si es elegible, `refunder` llama a `refund` (write). Esa tool está en `approval`,
+//     así que la ejecución pasa a `waiting_approval` y el proceso puede terminar.
+//  3. `orka runs approve <run-id>` reanuda: el paso 1 no se repite.
+
+type Order { id: string, status: string, total: number }
+type Receipt { id: string, amount: number }
+type Decision { eligible: bool, reason: string }
+
+enum RefundError {
+  NotEligible(reason: string)
+  Failed(cause: AgentError)
+}
+
+// Hace posible usar ? con AgentError dentro de un workflow que devuelve RefundError.
+convert (e: AgentError) -> RefundError {
+  Failed(e)
+}
+
+read tool find_order(id: string) -> Order {
+  http GET "https://api.example.com/orders/{id}"
+}
+
+write tool refund(order_id: string, amount: number) -> Receipt {
+  http POST "https://api.example.com/refunds"
+}
+
+agent eligibility {
+  model: "claude-sonnet-5-5"
+  instructions: """
+    Consulta el pedido con find_order y decide si es elegible para reembolso.
+    Un pedido es elegible solo si fue entregado hace menos de 30 días.
+    """
+  tools: [find_order]
+  returns: Decision
+  limits { max_steps: 4, max_tokens: 2000 }
+}
+
+agent refunder {
+  model: "claude-sonnet-5-5"
+  instructions: """
+    Procesa el reembolso completo del pedido indicado usando refund.
+    """
+  tools: [refund]
+  returns: Receipt
+  limits { max_steps: 3, max_tokens: 1500 }
+  approval { refund }
+}
+
+durable workflow process_refund(order_id: string) -> Result<Receipt, RefundError> {
+  let decision = eligibility.run("Pedido {order_id}")?
+
+  if decision.eligible {
+    Ok(refunder.run("Reembolsa el pedido {order_id}")?)
+  } else {
+    Err(NotEligible(decision.reason))
+  }
+}
