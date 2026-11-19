@@ -1,0 +1,3 @@
+hello.orka -> Lexer -> Parser -> Resolver -> Interpreter -> stdout
+                |        |          |           |
+                Diagnostics (with spans) -> nice error output
